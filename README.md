@@ -1,103 +1,247 @@
 # AnonCore
 
-AnonCore is an **anonymous, real-time social platform** built on a
-**Real-time Event-Driven Architecture**. Because there are no "friends,"
-every post is a global event broadcast to all active sessions simultaneously.
+**AnonCore** is an anonymous, real-time social platform built on the *Ghost Protocol*: every login issues a brand-new randomly-generated persona alias. Your posts exist; your identity doesn't.
+
+```
+"The void is always watching. Every transmission echoes into the darkness indefinitely."
+```
 
 ---
 
-## Architecture Overview
+## Table of Contents
+
+- [Architecture](#architecture)
+- [Prerequisites](#prerequisites)
+- [Quick Start — Docker Compose](#quick-start--docker-compose)
+- [Manual Setup](#manual-setup)
+  - [1 — Backend (FastAPI)](#1--backend-fastapi)
+  - [2 — Frontend (React + Vite)](#2--frontend-react--vite)
+  - [3 — Python SDK](#3--python-sdk)
+- [Configuration Reference](#configuration-reference)
+- [API Overview](#api-overview)
+- [Documentation](#documentation)
+- [License](#license)
+
+---
+
+## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                  AnonCore SDK (Python)                   │
-│  AuthModule · StreamModule · PostModule · NotificationModule │
-└────────────────────────┬─────────────────────────────────┘
-                         │  HTTPS / WebSocket
-┌────────────────────────▼─────────────────────────────────┐
-│               FastAPI Backend                            │
-│  /auth  ·  /posts  ·  /admin  ·  /ws/feed               │
-│  Moderation Middleware (Regex + NLP)                     │
-└──────┬──────────────────────────┬────────────────────────┘
-       │ SQLAlchemy (async)       │ Redis Pub/Sub
-┌──────▼──────────┐     ┌────────▼───────────┐
-│  PostgreSQL DB  │     │  Redis             │
-│  UserAccounts   │     │  global_feed chan. │
-│  Posts          │     └────────────────────┘
-│  Comments       │
-│  AuditLog       │
-└─────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                         Browser / Client                        │
+│                  React + Vite SPA  (port 3000)                  │
+└────────────────────────────┬────────────────────────────────────┘
+                             │  REST  /api/*   WebSocket  /ws/feed
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    FastAPI Backend  (port 8000)                  │
+│  /auth  /posts  /admin  /ws/feed  /health  /docs                │
+└──────────────┬──────────────────────────────┬───────────────────┘
+               │  async SQLAlchemy            │  redis-py
+               ▼                             ▼
+        ┌─────────────┐               ┌─────────────┐
+        │ PostgreSQL  │               │    Redis    │
+        │  (port 5432)│               │  (port 6379)│
+        └─────────────┘               └─────────────┘
+
+  Python SDK  (anoncore)
+  └── async client library wrapping all REST + WebSocket endpoints
 ```
 
-### The Ghost Protocol – Identity Rotation
-
-Users have two tokens:
+### The Ghost Protocol — Identity Rotation
 
 | Token | Lifetime | Visible to UI? |
 |-------|----------|----------------|
-| **Account Token** | Permanent | ❌ Never |
-| **Session Persona** | Per-login | ✅ Always |
+| **Account ID** | Permanent | ❌ Never |
+| **Session Persona** | Per-login | ✅ Always (e.g. `Neon-Raven-404`) |
 
-On every login the backend generates a new human-readable alias
-(e.g. `Neon-Raven-404`) via `generate_persona()`. This alias is embedded in
-the JWT and used for all public interactions. The permanent account ID never
-leaves the server.
+Every login generates a fresh human-readable alias. The permanent account ID never leaves the server.
 
 ---
 
-## Repository Layout
+## Prerequisites
 
+### Docker path (recommended)
+- [Docker Desktop](https://docs.docker.com/get-docker/) ≥ 24  
+  or Docker Engine + [Compose plugin](https://docs.docker.com/compose/install/)
+
+### Manual path
+| Tool | Minimum version |
+|------|----------------|
+| Python | 3.10 |
+| Node.js | 18 LTS |
+| npm | 9 |
+| PostgreSQL | 15 |
+| Redis | 7 |
+
+---
+
+## Quick Start — Docker Compose
+
+Spin up the entire stack (database, cache, backend, frontend) with a single command.
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/mdobns/AnonCore.git
+cd AnonCore
+
+# 2. Copy the environment template (edit SECRET_KEY before going to production)
+cp backend/.env.example backend/.env
+
+# 3. Start every service
+docker compose up --build
 ```
-AnonCore/
-├── sdk/                        # Python SDK (installable package)
-│   ├── anoncore/
-│   │   ├── __init__.py         # Public exports
-│   │   ├── client.py           # AnonCore – main entry point
-│   │   ├── auth.py             # AuthModule
-│   │   ├── stream.py           # StreamModule (WebSocket)
-│   │   ├── post.py             # PostModule
-│   │   ├── notification.py     # NotificationModule
-│   │   ├── models.py           # Data models / dataclasses
-│   │   └── exceptions.py       # Custom exceptions
-│   ├── tests/
-│   │   ├── test_auth.py
-│   │   ├── test_post.py
-│   │   └── test_notification.py
-│   ├── pyproject.toml
-│   └── requirements.txt
-│
-└── backend/                    # FastAPI backend
-    ├── app/
-    │   ├── main.py             # FastAPI app + WebSocket endpoint
-    │   ├── config.py           # Settings (pydantic-settings)
-    │   ├── database.py         # Async SQLAlchemy engine
-    │   ├── models.py           # ORM models
-    │   ├── routers/
-    │   │   ├── auth.py         # /auth/login · /auth/logout · /auth/refresh
-    │   │   ├── posts.py        # /posts/ · /posts/{id}/comments · /posts/report
-    │   │   ├── admin.py        # /admin/… (protected)
-    │   │   └── security.py     # JWT helpers, dependencies
-    │   ├── middleware/
-    │   │   └── moderation.py   # Regex + NLP pre-flight filter
-    │   └── services/
-    │       ├── persona.py      # Ghost Protocol persona generator
-    │       └── redis.py        # Redis Pub/Sub publisher/subscriber
-    ├── requirements.txt
-    └── .env.example
+
+Once all containers are healthy:
+
+| URL | What opens |
+|-----|-----------|
+| <http://localhost:3000> | AnonCore frontend |
+| <http://localhost:8000/docs> | Swagger / OpenAPI interactive docs |
+| <http://localhost:8000/redoc> | ReDoc API reference |
+| <http://localhost:8000/health> | Health-check endpoint (`{"status":"ok"}`) |
+
+**Stop the stack:**
+```bash
+docker compose down          # stop containers, keep database volumes
+docker compose down -v       # stop containers AND delete all data
 ```
 
 ---
 
-## SDK – Quick Start
+## Manual Setup
 
-### Installation
+Use this path when you already have PostgreSQL and Redis running, or when you want to develop each component independently.
+
+### 1 — Backend (FastAPI)
+
+#### a) Create a virtual environment
+
+```bash
+cd backend
+python -m venv .venv
+
+# Linux / macOS
+source .venv/bin/activate
+
+# Windows (PowerShell)
+.venv\Scripts\Activate.ps1
+```
+
+#### b) Install Python dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+#### c) Configure environment variables
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and set values for your environment. The variables you **must** change for a working local setup:
+
+| Variable | Example | Notes |
+|----------|---------|-------|
+| `DATABASE_URL` | `postgresql+asyncpg://anoncore:secret@localhost:5432/anoncore` | Requires the `asyncpg` driver |
+| `REDIS_URL` | `redis://localhost:6379` | |
+| `SECRET_KEY` | *(generate with `openssl rand -hex 32`)* | **Change before production** |
+
+See [docs/configuration.md](docs/configuration.md) for every available variable.
+
+#### d) Create the PostgreSQL database
+
+The backend automatically creates all tables on first startup — no migration tool needed for development.
+
+If you need to create the database user/schema first:
+
+```bash
+psql -U postgres <<SQL
+CREATE USER anoncore WITH PASSWORD 'anoncore';
+CREATE DATABASE anoncore OWNER anoncore;
+SQL
+```
+
+#### e) Start the backend server
+
+```bash
+# Development — auto-reloads on file changes
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Production
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+The API is live at <http://localhost:8000>.  
+Swagger UI (interactive): <http://localhost:8000/docs>
+
+---
+
+### 2 — Frontend (React + Vite)
+
+#### a) Install Node.js dependencies
+
+```bash
+cd frontend
+npm install
+```
+
+#### b) Configure the frontend (optional)
+
+Create `frontend/.env.local`:
+
+```bash
+# Must match one of the values in VALID_API_KEYS (backend .env)
+VITE_API_KEY=dev-api-key
+
+# Only needed if the backend is not on the same host (production)
+# VITE_WS_URL=wss://api.example.com
+```
+
+> **Proxy note:** In development, Vite automatically proxies `/api/*` →  
+> `http://localhost:8000` and `/ws/*` → `ws://localhost:8000`, so you never  
+> need to set CORS headers or custom origins when running locally.
+
+#### c) Start the development server
+
+```bash
+npm run dev
+```
+
+Open <http://localhost:3000>.
+
+#### d) Build for production
+
+```bash
+npm run build      # type-checks + bundles to frontend/dist/
+npm run preview    # locally preview the production build
+```
+
+Deploy the `frontend/dist/` directory to any static host (Nginx, Caddy, S3, Vercel, Netlify, etc.).
+
+---
+
+### 3 — Python SDK
+
+The SDK is a standalone async Python library. You can install it into any Python 3.10+ environment.
+
+#### a) Install
 
 ```bash
 cd sdk
+
+# Standard install
+pip install .
+
+# Editable install (recommended while developing the SDK itself)
 pip install -e .
+
+# Include test/dev dependencies
+pip install -e ".[dev]"
 ```
 
-### Usage
+#### b) Minimal usage example
 
 ```python
 import asyncio
@@ -106,148 +250,88 @@ from anoncore.models import SDKConfig, Credentials
 
 async def main():
     anon = AnonCore(SDKConfig(
-        api_key="dev-api-key",
+        api_key="dev-api-key",            # must match VALID_API_KEYS on the server
         base_url="http://localhost:8000",
         ws_url="ws://localhost:8000",
     ))
 
-    # Login – generates a fresh persona ("Ghost Protocol")
+    # Every login returns a fresh anonymous persona — Ghost Protocol
     session = await anon.auth.login(Credentials("user@example.com", "secret"))
-    print(f"Logged in as: {session.persona}")   # e.g. "Neon-Raven-404"
+    print(f"Connected as: {session.persona}")   # e.g. "Neon-Raven-404"
 
-    # Subscribe to the real-time global feed
-    def on_event(event):
-        if event.type.value == "NEW_POST":
-            print(f"New post by {event.data.session_alias}: {event.data.content}")
+    # Subscribe to real-time events before connecting
+    anon.stream.subscribe(lambda event: print("Event:", event.type, event.data))
 
-    anon.stream.subscribe(on_event)
-
-    # Get notified when someone replies to your posts or mentions you
-    anon.notifications.on_notification(
-        lambda n: print(f"🔔 {n.message}")
-    )
-
-    # Connect WebSocket
+    # Open the WebSocket stream
     await anon.connect()
 
-    # Create a post
+    # Post to the global anonymous feed
     post = await anon.post.create_post("Hello, anonymous world!")
-    print(f"Post created: {post.id}")
 
-    # Add a comment
-    comment = await anon.post.add_comment(post.id, "Nice post!")
+    # Fetch the current feed
+    feed = await anon.post.get_feed()
+    for p in feed:
+        print(f"  [{p.session_alias}] {p.content}")
 
-    # Report content
-    await anon.post.report_content(post_id=post.id, reason="spam")
-
-    # Refresh identity (rotate persona)
+    # Rotate identity without logging out
     new_session = await anon.auth.refresh_identity()
-    print(f"New persona: {new_session.persona}")   # e.g. "Silent-Fox-82"
+    print(f"New persona: {new_session.persona}")
 
-    # Logout – wipes notification history for true anonymity
+    # Logout wipes all local session and notification data
     await anon.logout()
 
 asyncio.run(main())
 ```
 
-### SDK Modules
-
-| Module | Class | Key Methods |
-|--------|-------|-------------|
-| **Auth** | `AuthModule` | `login()`, `logout()`, `refresh_identity()` |
-| **Stream** | `StreamModule` | `subscribe()`, `connect()`, `disconnect()` |
-| **Post** | `PostModule` | `create_post()`, `add_comment()`, `report_content()`, `get_feed()` |
-| **Notifications** | `NotificationModule` | `on_notification()`, `mark_read()`, `clear()` |
-
-### Exceptions
-
-| Exception | When raised |
-|-----------|-------------|
-| `AuthenticationError` | Bad credentials |
-| `SuspendedAccountError` | Account banned |
-| `SessionExpiredError` | JWT expired |
-| `ModerationError` | Content flagged (HTTP 403) |
-| `NotConnectedError` | Action requires login |
-| `APIError` | Unexpected non-2xx response |
+See [docs/sdk.md](docs/sdk.md) for the complete SDK reference.
 
 ---
 
-## Backend – Quick Start
+## Configuration Reference
 
-### Prerequisites
+All environment variables with their defaults and accepted values are documented in [docs/configuration.md](docs/configuration.md).
 
-- Python 3.10+
-- PostgreSQL
-- Redis
+---
 
-### Setup
-
-```bash
-cd backend
-cp .env.example .env   # fill in your values
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | `postgresql+asyncpg://…` | Async PostgreSQL connection string |
-| `REDIS_URL` | `redis://localhost:6379` | Redis connection string |
-| `SECRET_KEY` | *(must change)* | JWT signing secret |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | Token lifetime |
-| `VALID_API_KEYS` | `dev-api-key` | Comma-separated list of allowed SDK API keys |
-| `MODERATION_ENABLED` | `true` | Toggle the pre-flight moderation filter |
-| `MAX_STRIKES` | `3` | Strikes before automatic account suspension |
-| `ADMIN_EMAILS` | `""` | Comma-separated admin email list |
-
-### API Endpoints
+## API Overview
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/auth/register` | API key | Create account + session |
-| POST | `/auth/login` | API key | Login, get new persona |
-| POST | `/auth/logout` | JWT | Invalidate session |
-| POST | `/auth/refresh` | JWT | Rotate identity |
-| GET | `/posts/` | JWT | Global feed |
-| POST | `/posts/` | JWT | Create post |
-| GET | `/posts/{id}/comments` | JWT | List comments |
-| POST | `/posts/{id}/comments` | JWT | Add comment |
-| POST | `/posts/report` | JWT | Report content |
-| GET | `/admin/users` | JWT (admin) | List accounts |
-| POST | `/admin/users/{id}/ban` | JWT (admin) | Ban user |
-| DELETE | `/admin/posts/{id}` | JWT (admin) | Remove post |
-| GET | `/admin/audit-logs` | JWT (admin) | Audit trail |
-| WS | `/ws/feed` | JWT + API key | Real-time event stream |
+| `POST` | `/auth/register` | API key | Create account; returns JWT + persona |
+| `POST` | `/auth/login` | API key | Login; rotates persona; returns JWT |
+| `POST` | `/auth/logout` | JWT | Invalidate the current session |
+| `POST` | `/auth/refresh` | JWT | Rotate persona; return new JWT |
+| `GET`  | `/posts/` | JWT | Paginated global feed |
+| `POST` | `/posts/` | JWT | Submit a new anonymous post |
+| `GET`  | `/posts/{id}/comments` | JWT | List comments on a post |
+| `POST` | `/posts/{id}/comments` | JWT | Add an anonymous comment |
+| `POST` | `/posts/report` | JWT | Flag content for admin review |
+| `GET`  | `/admin/users` | JWT + admin | List all user accounts |
+| `POST` | `/admin/users/{id}/ban` | JWT + admin | Ban a user |
+| `POST` | `/admin/users/{id}/unban` | JWT + admin | Lift a ban |
+| `POST` | `/admin/users/{id}/reset-strikes` | JWT + admin | Reset strike counter |
+| `DELETE` | `/admin/posts/{id}` | JWT + admin | Soft-delete a post |
+| `DELETE` | `/admin/comments/{id}` | JWT + admin | Soft-delete a comment |
+| `GET`  | `/admin/audit-logs` | JWT + admin | Latest moderation audit entries |
+| `GET`  | `/health` | none | Liveness check |
+| `WS`   | `/ws/feed?token=…&api_key=…` | JWT + API key | Real-time event stream |
+
+Full interactive explorer: <http://localhost:8000/docs>  
+Detailed reference with cURL examples: [docs/api.md](docs/api.md)
 
 ---
 
-## Moderation & Strike Workflow
+## Documentation
 
-1. **Pre-flight Filter** – Every `POST /posts/` and `POST /posts/{id}/comments`
-   runs the content through `run_moderation()` before any database write.
-2. **HTTP 403 on flag** – The SDK raises `ModerationError` which the UI can
-   display as a warning toast.
-3. **Strike Counter** – Each flagged submission increments `strike_count` on
-   the hidden `UserAccount` record.
-4. **Auto-Suspension** – When `strike_count >= MAX_STRIKES` the account's
-   `is_banned` flag is set to `True`, causing subsequent requests to return
-   `403 Forbidden` and the SDK to surface a `SuspendedAccountError`.
-
----
-
-## Running Tests
-
-```bash
-cd sdk
-pip install -r requirements-dev.txt
-pytest -v
-```
+| File | Contents |
+|------|---------|
+| [docs/configuration.md](docs/configuration.md) | Every environment variable, defaults, and valid values |
+| [docs/api.md](docs/api.md) | REST & WebSocket API reference with cURL examples |
+| [docs/sdk.md](docs/sdk.md) | Python SDK — classes, methods, error types |
+| [docs/development.md](docs/development.md) | Dev workflow, running tests, project structure |
 
 ---
 
 ## License
 
-This project is licensed under the MIT License.
-
+This project is licensed under the **MIT License**.
