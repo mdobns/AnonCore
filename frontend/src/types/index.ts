@@ -55,3 +55,20 @@ export interface AuthResponse {
 export interface APIError {
   detail: string;
 }
+
+// ─── Admin types ──────────────────────────────────────────────────────────────
+
+export interface UserSummary {
+  id: string;
+  email: string;
+  is_banned: boolean;
+  strike_count: number;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  user_id: string;
+  violation_type: string;
+  detail: string;
+  timestamp: string;
+}

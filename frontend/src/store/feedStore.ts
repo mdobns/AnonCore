@@ -16,7 +16,12 @@ interface FeedState {
 export const useFeedStore = create<FeedState>((set, get) => ({
   posts: [],
   setPosts: (posts) => set({ posts }),
-  prependPost: (post) => set((s) => ({ posts: [post, ...s.posts] })),
+  prependPost: (post) =>
+    set((s) =>
+      s.posts.some((p) => p.id === post.id)
+        ? s
+        : { posts: [post, ...s.posts] },
+    ),
   incrementCommentCount: (postId) =>
     set((s) => ({
       posts: s.posts.map((p) =>
@@ -28,6 +33,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     set((s) => ({ comments: { ...s.comments, [postId]: comments } })),
   appendComment: (comment) => {
     const existing = get().comments[comment.post_id] ?? [];
+    if (existing.some((c) => c.id === comment.id)) return;
     set((s) => ({
       comments: {
         ...s.comments,

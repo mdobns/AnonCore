@@ -28,12 +28,16 @@ export function Header({
   onRefreshIdentity,
   onLogout,
   onToggleNotif,
+  onToggleAdmin,
   unread,
+  isAdmin,
 }: {
   onRefreshIdentity: () => void;
   onLogout: () => void;
   onToggleNotif: () => void;
+  onToggleAdmin: () => void;
   unread: number;
+  isAdmin: boolean;
 }) {
   const session = useAuthStore((s) => s.session);
 
@@ -62,6 +66,11 @@ export function Header({
             <BellIcon />
             {unread > 0 && <span className="badge">{unread > 9 ? '9+' : unread}</span>}
           </button>
+          {isAdmin && (
+            <button className="btn btn-amber" onClick={onToggleAdmin} title="Admin console">
+              <ShieldIcon /> Admin
+            </button>
+          )}
           <button className="btn btn-purple" onClick={onRefreshIdentity} title="Rotate identity">
             <RotateIcon /> Rotate
           </button>
@@ -105,6 +114,13 @@ function PowerIcon() {
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
       <line x1="12" y1="2" x2="12" y2="12" />
+    </svg>
+  );
+}
+function ShieldIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
     </svg>
   );
 }

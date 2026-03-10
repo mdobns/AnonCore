@@ -1,4 +1,4 @@
-import type { AuthResponse, Post, Comment } from '../types';
+import type { AuthResponse, Post, Comment, UserSummary, AuditLogEntry } from '../types';
 
 const BASE = '/api';
 const API_KEY = import.meta.env.VITE_API_KEY ?? 'dev-api-key';
@@ -69,6 +69,32 @@ export const posts = {
 
   report: (token: string, reason: string, postId?: string, commentId?: string) =>
     request<{ message: string }>('POST', '/posts/report', { reason, post_id: postId, comment_id: commentId }, token),
+};
+
+// ─── Admin ────────────────────────────────────────────────────────────────────
+
+export const admin = {
+  /** Returns the user list; throws with status=403 if not admin. */
+  listUsers: (token: string) =>
+    request<UserSummary[]>('GET', '/admin/users', undefined, token),
+
+  banUser: (token: string, userId: string) =>
+    request<{ message: string }>('POST', `/admin/users/${userId}/ban`, undefined, token),
+
+  unbanUser: (token: string, userId: string) =>
+    request<{ message: string }>('POST', `/admin/users/${userId}/unban`, undefined, token),
+
+  resetStrikes: (token: string, userId: string) =>
+    request<{ message: string }>('POST', `/admin/users/${userId}/reset-strikes`, undefined, token),
+
+  removePost: (token: string, postId: string) =>
+    request<{ message: string }>('DELETE', `/admin/posts/${postId}`, undefined, token),
+
+  removeComment: (token: string, commentId: string) =>
+    request<{ message: string }>('DELETE', `/admin/comments/${commentId}`, undefined, token),
+
+  auditLogs: (token: string, limit = 100) =>
+    request<AuditLogEntry[]>('GET', `/admin/audit-logs?limit=${limit}`, undefined, token),
 };
 
 // ─── WebSocket stream ─────────────────────────────────────────────────────────

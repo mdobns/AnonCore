@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # CORS
     allowed_origins: str = "http://localhost:3000"
 
+    # Admin
+    admin_emails_raw: str = ""
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
     @property
@@ -41,9 +44,7 @@ class Settings(BaseSettings):
 
     @property
     def admin_emails(self) -> list[str]:
-        import os
-        raw = os.getenv("ADMIN_EMAILS", "")
-        return [e.strip() for e in raw.split(",") if e.strip()]
+        return [e.strip() for e in self.admin_emails_raw.split(",") if e.strip()]
 
 
 @lru_cache
