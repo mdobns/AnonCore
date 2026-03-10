@@ -275,6 +275,69 @@ async def add_comment(
     return _comment_to_response(comment)
 
 
+@router.delete("/{post_id}", response_model=MessageResponse)
+async def delete_post(
+    post_id: str,
+    current_user: UserAccount = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> MessageResponse:
+    """Soft-delete a post.  Allowed for the post's own author or an admin."""
+    post = await db.scalar(
+        select(Post).where(Post.id == uuid.UUID(post_id), Post.is_removed.is_(False))
+    )
+    if not post:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found.")
+
+    is_admin = current_user.email in settings.admin_emails
+    if post.user_id != current_user.id and not is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized.")
+
+    post.is_removed = True
+    log = AuditLog(
+        user_id=current_user.id,
+        violation_type="post_removed",
+        detail=f"Removed by {'admin' if is_admin else 'author'} {current_user.email}.",
+        post_id=post.id,
+    )
+    db.add(log)
+    return MessageResponse(message=f"Post {post_id} removed.")
+
+
+@router.delete("/{post_id}/comments/{comment_id}", response_model=MessageResponse)
+async def delete_comment(
+    post_id: str,
+    comment_id: str,
+    current_user: UserAccount = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> MessageResponse:
+    """Soft-delete a comment.  Allowed for the comment's own author or an admin."""
+    comment = await db.scalar(
+        select(Comment).where(
+            Comment.id == uuid.UUID(comment_id),
+            Comment.post_id == uuid.UUID(post_id),
+            Comment.is_removed.is_(False),
+        )
+    )
+    if not comment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found.")
+
+    is_admin = current_user.email in settings.admin_emails
+    if comment.user_id != current_user.id and not is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized.")
+
+    comment.is_removed = True
+    log = AuditLog(
+        user_id=current_user.id,
+        violation_type="comment_removed",
+        detail=f"Removed by {'admin' if is_admin else 'author'} {current_user.email}.",
+        comment_id=comment.id,
+    )
+    db.add(log)
+    return MessageResponse(message=f"Comment {comment_id} removed.")
+
+
 @router.post("/report", response_model=MessageResponse, status_code=status.HTTP_200_OK)
 async def report_content(
     body: ReportCreate,

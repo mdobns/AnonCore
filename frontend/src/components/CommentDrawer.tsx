@@ -9,8 +9,12 @@ import type { Comment } from '../types';
 
 export function CommentDrawer() {
   const session = useAuthStore((s) => s.session);
-  const { posts, comments, activePostId, setActivePostId, setComments, appendComment, incrementCommentCount } =
-    useFeedStore();
+  const isAdmin = useAuthStore((s) => s.isAdmin);
+  const {
+    posts, comments, activePostId, setActivePostId,
+    setComments, appendComment, incrementCommentCount,
+    removeComment, decrementCommentCount,
+  } = useFeedStore();
   const addToast = useUIStore((s) => s.addToast);
 
   const post = posts.find((p) => p.id === activePostId);
@@ -64,6 +68,31 @@ export function CommentDrawer() {
     }
   }
 
+  async function handleDeleteComment(comment: Comment) {
+    if (!session || !activePostId) return;
+    if (!window.confirm('Delete this comment? This cannot be undone.')) return;
+    try {
+      await postsAPI.deleteComment(session.accessToken, activePostId, comment.id);
+      removeComment(activePostId, comment.id);
+      decrementCommentCount(activePostId);
+      addToast('info', 'Comment deleted.');
+    } catch (err: unknown) {
+      addToast('error', (err as { detail?: string })?.detail ?? 'Could not delete comment.');
+    }
+  }
+
+  async function handleReportComment(comment: Comment) {
+    if (!session) return;
+    const reason = window.prompt('Reason for report:');
+    if (!reason) return;
+    try {
+      await postsAPI.report(session.accessToken, reason, undefined, comment.id);
+      addToast('info', 'Report submitted.');
+    } catch {
+      addToast('error', 'Could not submit report.');
+    }
+  }
+
   return (
     <AnimatePresence>
       {activePostId && post && (
@@ -104,23 +133,46 @@ export function CommentDrawer() {
                   &gt; no replies yet — be the first
                 </div>
               )}
-              {postComments.map((c) => (
-                <motion.div
-                  key={c.id}
-                  className="comment-item"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <div className="comment-meta">
-                    <span className="comment-alias">{c.session_alias}</span>
-                    <time className="comment-time">
-                      {formatDistanceToNowSafe(c.created_at)}
-                    </time>
-                  </div>
-                  <p className="comment-content">{c.content}</p>
-                </motion.div>
-              ))}
+              {postComments.map((c) => {
+                const isOwner = !!session && session.persona === c.session_alias;
+                const canDelete = isAdmin || isOwner;
+                return (
+                  <motion.div
+                    key={c.id}
+                    className="comment-item"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <div className="comment-meta">
+                      <span className="comment-alias">{c.session_alias}</span>
+                      <time className="comment-time">
+                        {formatDistanceToNowSafe(c.created_at)}
+                      </time>
+                      <div className="comment-actions">
+                        <button
+                          className="comment-action-btn"
+                          title="Report comment"
+                          disabled={!session}
+                          onClick={() => handleReportComment(c)}
+                        >
+                          <FlagIcon />
+                        </button>
+                        {canDelete && (
+                          <button
+                            className="comment-action-btn comment-action-delete"
+                            title="Delete comment"
+                            onClick={() => handleDeleteComment(c)}
+                          >
+                            <TrashIcon />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <p className="comment-content">{c.content}</p>
+                  </motion.div>
+                );
+              })}
               <div ref={bottomRef} />
             </div>
 
@@ -170,6 +222,25 @@ function SendIcon() {
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <line x1="22" y1="2" x2="11" y2="13" />
       <polygon points="22 2 15 22 11 13 2 9 22 2" />
+    </svg>
+  );
+}
+function FlagIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+      <line x1="4" y1="22" x2="4" y2="15" />
+    </svg>
+  );
+}
+function TrashIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+      <path d="M9 6V4h6v2" />
     </svg>
   );
 }

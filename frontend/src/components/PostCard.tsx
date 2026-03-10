@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import type { Post } from '../types';
 import { useFeedStore } from '../store/feedStore';
@@ -12,8 +13,15 @@ interface PostCardProps {
 
 export function PostCard({ post, isNew }: PostCardProps) {
   const setActivePostId = useFeedStore((s) => s.setActivePostId);
+  const removePost = useFeedStore((s) => s.removePost);
   const addToast = useUIStore((s) => s.addToast);
   const session = useAuthStore((s) => s.session);
+  const isAdmin = useAuthStore((s) => s.isAdmin);
+
+  const isOwner = !!session && session.persona === post.session_alias;
+  const canDelete = isAdmin || isOwner;
+
+  const [busy, setBusy] = useState(false);
 
   const timeAgo = (() => {
     try {
@@ -22,6 +30,35 @@ export function PostCard({ post, isNew }: PostCardProps) {
       return 'just now';
     }
   })();
+
+  async function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!session || busy) return;
+    if (!window.confirm('Delete this post? This cannot be undone.')) return;
+    setBusy(true);
+    try {
+      await postsAPI.deletePost(session.accessToken, post.id);
+      removePost(post.id);
+      addToast('info', 'Post deleted.');
+    } catch (err: unknown) {
+      addToast('error', (err as { detail?: string })?.detail ?? 'Could not delete post.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReport(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!session) return;
+    const reason = window.prompt('Reason for report:');
+    if (!reason) return;
+    try {
+      await postsAPI.report(session.accessToken, reason, post.id);
+      addToast('info', 'Report submitted.');
+    } catch {
+      addToast('error', 'Could not submit report.');
+    }
+  }
 
   return (
     <article
@@ -48,40 +85,29 @@ export function PostCard({ post, isNew }: PostCardProps) {
           <CommentIcon />
           {post.comment_count} {post.comment_count === 1 ? 'reply' : 'replies'}
         </button>
-        <ReportButton postId={post.id} token={session?.accessToken} addToast={addToast} />
+
+        <div className="post-actions-right" onClick={(e) => e.stopPropagation()}>
+          <button
+            className="post-action"
+            title="Report this post"
+            disabled={!session}
+            onClick={handleReport}
+          >
+            <FlagIcon />
+          </button>
+          {canDelete && (
+            <button
+              className="post-action post-action-delete"
+              title="Delete this post"
+              disabled={busy}
+              onClick={handleDelete}
+            >
+              {busy ? <span className="spinner" style={{ width: 11, height: 11 }} /> : <TrashIcon />}
+            </button>
+          )}
+        </div>
       </div>
     </article>
-  );
-}
-
-function ReportButton({
-  postId,
-  token,
-  addToast,
-}: {
-  postId: string;
-  token?: string;
-  addToast: (kind: 'info' | 'success' | 'warning' | 'error', msg: string) => void;
-}) {
-  return (
-    <button
-      className="post-action"
-      style={{ marginLeft: 'auto' }}
-      title="Report this post"
-      onClick={async (e) => {
-        e.stopPropagation();
-        const reason = window.prompt('Reason for report:');
-        if (!reason || !token) return;
-        try {
-          await postsAPI.report(token, reason, postId);
-          addToast('info', 'Report submitted.');
-        } catch {
-          addToast('error', 'Could not submit report.');
-        }
-      }}
-    >
-      <FlagIcon />
-    </button>
   );
 }
 
@@ -97,6 +123,17 @@ function FlagIcon() {
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
       <line x1="4" y1="22" x2="4" y2="15" />
+    </svg>
+  );
+}
+function TrashIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+      <path d="M9 6V4h6v2" />
     </svg>
   );
 }

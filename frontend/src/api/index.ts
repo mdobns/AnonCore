@@ -67,6 +67,12 @@ export const posts = {
   addComment: (token: string, postId: string, content: string) =>
     request<Comment>('POST', `/posts/${postId}/comments`, { content }, token),
 
+  deletePost: (token: string, postId: string) =>
+    request<{ message: string }>('DELETE', `/posts/${postId}`, undefined, token),
+
+  deleteComment: (token: string, postId: string, commentId: string) =>
+    request<{ message: string }>('DELETE', `/posts/${postId}/comments/${commentId}`, undefined, token),
+
   report: (token: string, reason: string, postId?: string, commentId?: string) =>
     request<{ message: string }>('POST', '/posts/report', { reason, post_id: postId, comment_id: commentId }, token),
 };
