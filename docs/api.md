@@ -302,7 +302,7 @@ curl -X POST http://localhost:8000/posts/report \
 
 ### Admin
 
-All admin routes require the authenticated user's email to be listed in the `ADMIN_EMAILS` environment variable.
+All admin routes require the authenticated user's email to be listed in the `ADMIN_EMAILS_RAW` environment variable. See [docs/admin.md](admin.md) for a step-by-step guide on creating and managing admin accounts.
 
 #### `GET /admin/users`
 

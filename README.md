@@ -17,6 +17,7 @@
   - [1 — Backend (FastAPI)](#1--backend-fastapi)
   - [2 — Frontend (React + Vite)](#2--frontend-react--vite)
   - [3 — Python SDK](#3--python-sdk)
+- [Creating Admin Accounts](#creating-admin-accounts)
 - [Configuration Reference](#configuration-reference)
 - [API Overview](#api-overview)
 - [Documentation](#documentation)
@@ -287,6 +288,24 @@ See [docs/sdk.md](docs/sdk.md) for the complete SDK reference.
 
 ---
 
+## Creating Admin Accounts
+
+Admin privileges are granted by adding a registered user's email to the `ADMIN_EMAILS_RAW` environment variable — there is no separate sign-up flow.
+
+**Quick steps:**
+
+1. **Register** the account via `POST /auth/register` (or the web UI).
+2. **Add the email** to `ADMIN_EMAILS_RAW` in `backend/.env`:
+   ```bash
+   ADMIN_EMAILS_RAW=admin@example.com
+   ```
+3. **Restart** the backend for the change to take effect.
+4. **Log in** with the promoted account — the admin console will appear in the frontend sidebar.
+
+For a full guide including multiple admins, revoking access, available admin endpoints, and security recommendations, see [docs/admin.md](docs/admin.md).
+
+---
+
 ## Configuration Reference
 
 All environment variables with their defaults and accepted values are documented in [docs/configuration.md](docs/configuration.md).
@@ -325,6 +344,7 @@ Detailed reference with cURL examples: [docs/api.md](docs/api.md)
 
 | File | Contents |
 |------|---------|
+| [docs/admin.md](docs/admin.md) | How to create and manage admin accounts |
 | [docs/configuration.md](docs/configuration.md) | Every environment variable, defaults, and valid values |
 | [docs/api.md](docs/api.md) | REST & WebSocket API reference with cURL examples |
 | [docs/sdk.md](docs/sdk.md) | Python SDK — classes, methods, error types |

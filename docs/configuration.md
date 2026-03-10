@@ -103,12 +103,14 @@ ALLOWED_ORIGINS=https://app.example.com,https://www.example.com
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ADMIN_EMAILS` | *(empty)* | Comma-separated list of email addresses that have access to the `/admin/*` endpoints. Leave empty to disable admin routes. |
+| `ADMIN_EMAILS_RAW` | *(empty)* | Comma-separated list of email addresses that have access to the `/admin/*` endpoints. Leave empty to disable admin routes. |
 
 **Example:**
 ```bash
-ADMIN_EMAILS=admin@example.com,security@example.com
+ADMIN_EMAILS_RAW=admin@example.com,security@example.com
 ```
+
+> **Note:** There is no separate admin account type. Any registered user whose email appears in `ADMIN_EMAILS_RAW` automatically gains admin privileges. See [docs/admin.md](admin.md) for the full guide on creating and managing admin accounts.
 
 ---
 
